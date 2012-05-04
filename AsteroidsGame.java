@@ -2,105 +2,235 @@ import java.applet.*; //needed to create an applet
 import java.awt.*; //needed for graphics
 import java.awt.event.*; //needed for event handling
 
-public class AsteroidsGame extends Applet implements Runnable, KeyListener{
-Thread thread; // used to run the game
-Dimension dim; // these are used for double buffering
-Image img; // the back buffer
-Graphics g; // used to draw on the back buffer
-// used to regulate the speed of the game
-long endTime, startTime, framePeriod;
-/**
-* This method is called when the applet is first created.
-*/
-public void init(){
-resize(500,500); //can be set to any dimension desired
-// INITIALIZE ANY OF YOUR OWN VARIABLES HERE
-endTime=0;
-startTime=0;
-framePeriod=25; //may be adjusted to change the speed that
-//the game runs.
-addKeyListener(this); //tell the class to listen for KeyEvents
-dim=getSize();
-img=createImage(dim.width, dim.height);//create back buffer
-g=img.getGraphics(); //create Graphics obj to draw on back buffer
-thread=new Thread(this); //create the thread that runs game
-thread.start(); //start the thread
-}
-/**
-* This method paints the graphics of the applet.
-* @param gfx - the applet's graphics object
-*/
-public void paint(Graphics gfx){
-g.setColor(Color.black); //set color to clear the screen with
-g.fillRect(0,0,500,500); //clear the screen
+ public class AsteroidsGame extends Applet implements Runnable, KeyListener{
+   private Thread thread;
+   private long startTime;
+	private long endTime;
+	private long framePeriod;
+	private Dimension dim;
+	private Image img;
+	private Graphics g;
+   Ship ship;
+	boolean paused;
+   Shot[] shots;
+	int numShots;
+	boolean shooting;
+	Asteroid[] asteroids;
+	int numAsteroids;
+	double astRadius, minAstVel, maxAstVel;
+	int astNumHits, astNumSplit;
+	
+	int level;
+	
+	
+ public void init(){
+  this.resize(750,750); // make sure the applet is the right size
 
+  startTime = 0;
+  endTime = 0;
+  framePeriod = 25;
+  addKeyListener(this);
+  
+  numAsteroids = 0;
+  level = 0;
+  astRadius = 60;
+  minAstVel = 5;
+  maxAstVel = 5;
+  astNumHits = 3;
+  astNumSplit = 2;
+  
+  shots = new Shot[41];
+  
+  dim = getSize();
+  img = createImage(dim.width, dim.height);
+  g = img.getGraphics();
+  
+  thread = new Thread(this);
+  thread.start();
+  
+ }
+ 
+ public void setUpNextLevel(){
+ 
+  level++;
+  ship = new Ship(250,250,0,.35,.98,.1,12);
+  numShots = 0;
+  paused = false;
+  shooting = false;
+  
+  asteroids = new Asteroid[level * (int)Math.pow(astNumSplit,astNumHits-1)+1];
+  numAsteroids = level;
+  
+  for(int i = 0; i < numAsteroids; i++)
+    asteroids[i] = new Asteroid(Math.random() * dim.width, Math.random() * dim.height,
+	                      astRadius, minAstVel, maxAstVel, astNumHits, astNumSplit);
+	}
+  
+ 
+ public void paint(Graphics gfx){
+  g.setColor(Color.black); //Notice these first four lines all
+  g.fillRect(0,0,getWidth(),getHeight()); //use g instead of gfx now. g draws
 
-// CODE TO DRAW GRAPHICS HERE
-gfx.drawImage(img,0,0,this); //copys back buffer onto the screen
-}
-/**
-* This is the method called by repaint() and makes a call to
-* paint() without clearing the screen.
-* The original method, Applet.update(), clears the screen
-* with a white rectangle and then calls paint.
-* Clearing the screen causes flickering in games, so we have
-* overriden update() to call paint without clearing.
-* We can do this because we will make paint() redraw the entire
-* screen, so clearing it first would be pointless.
-* @param gfx - the applet's graphics object
-*/
+   for (int i = 0; i < numShots; i++)
+	  shots[i].draw(g);
+  for(int i=0;i<numAsteroids;i++)
+     asteroids[i].draw(g);
+  ship.draw(g);
+  g.drawString("Level " + level, 20, 20);
+  gfx.drawImage(img, 0, 0, this);
+ }
+ 
 public void update(Graphics gfx){
-paint(gfx);
+paint(gfx); // call paint without clearing the screen
 }
-/**
-* This method contains the code to run the game.
-* It is executed by a thread.
-*/
+
 public void run(){
-for(;;){
-startTime=System.currentTimeMillis();
-// CODE TO EXECUTE A FRAME OF THE GAME HERE
-repaint();
-try{ //regulate the speed of the game
-endTime=System.currentTimeMillis();
-if(framePeriod-(endTime-startTime)>0)
-Thread.sleep(framePeriod-(endTime-startTime));
-}catch(InterruptedException e){
+ 
+ for(;;){
+  startTime=System.currentTimeMillis();
+  
+  //start next level when all asteroids are destroyed
+   if(numAsteroids<=0)
+   
+	setUpNextLevel();
+   
+	if(!paused){
+    ship.move(dim.width,dim.height); // move the ship
+   //move shots and remove dead shots
+  
+   for(int i=0;i<numShots;i++){
+    shots[i].move(dim.width,dim.height);
+   //removes shot if it has gone for too long
+   //without hitting anything
+    if(shots[i].getLifeLeft()<=0){
+   //shifts all the next shots up one
+   //space in the array
+    deleteShot(i);
+    i--; // move the outer loop back one so
+   // the shot shifted up is not skipped
+ }
 }
+ //move asteroids and check for collisions
+  updateAsteroids();//SEE NEW METHOD BELOW
+ if(shooting && ship.canShoot()){
+  //add a shot on to the array
+    shots[numShots]=ship.shoot();
+    numShots++;
+ }
+}
+  repaint();
+  try{
+
+   endTime=System.currentTimeMillis();
+  if(framePeriod-(endTime-startTime)>0)
+   Thread.sleep(framePeriod-(endTime-startTime));
+ }catch(InterruptedException e){
+ }
 }
 }
 
-/**
-* Responds to any keys being pressed on the keyboard
-* @param e - contains information on the event (what key was
-* pressed, etc)
-*/
-public void keyPressed(KeyEvent e){
-if(e.getKeyCode()==KeyEvent.VK_UP){
-// CODE TO RESPOND TO UP KEY BEING PRESSED
-}else if(e.getKeyCode()==KeyEvent.VK_DOWN){
-// CODE TO RESPOND TO DOWN KEY BEING PRESSED
-}else if(true);
- // DITTO FOR ALL CONTROLS IN THE GAME
-}
-/**
-* Responds to any keys being released on the keyboard
-* @param e - contains information on the event (what key was
-* released, etc)
-*/
-public void keyReleased(KeyEvent e){
+public void deleteShot(int index){
+ numShots--;
+ for(int i = index; i < numShots; i++)
+  shots[i] = shots[i + 1];
+  shots[numShots] = null;
+  }
 
-if(e.getKeyCode()==KeyEvent.VK_UP){
-// CODE TO RESPOND TO UP KEY BEING RELEASED
-}else if(e.getKeyCode()==KeyEvent.VK_DOWN){
-// CODE TO RESPOND TO DOWN KEY BEING RELEASED
-}else if( )
- // DITTO FOR ALL CONTROLS IN THE GAME
+private void deleteAsteroid(int index){
+  //delete asteroid and shift ones after it up in the array
+   numAsteroids--;
+   
+	for(int i=index;i<numAsteroids;i++)
+    asteroids[i]=asteroids[i+1];
+    asteroids[numAsteroids]=null;
 }
-/**
-* This method doesn't usually need to do anything for simple games.
-* It might be used if the game involved the user typing in text.
-*/
-public void keyTyped(KeyEvent e){
+
+private void addAsteroid(Asteroid ast){
+  //adds the asteroid passed in to the end of the array
+  asteroids[numAsteroids]=ast;
+  numAsteroids++;
 }
+
+private void updateAsteroids(){
+  for(int i=0;i<numAsteroids;i++){
+  // move each asteroid
+  asteroids[i].move(dim.width,dim.height);
+  //check for collisions with the ship, restart the
+  //level if the ship gets hit
+  if(asteroids[i].shipCollision(ship)){
+   level--; //restart this level
+   numAsteroids=0;
+  return;
+ }
+ //check for collisions with any of the shots
+  for(int j=0;j<numShots;j++){
+   if(asteroids[i].shotCollision(shots[j])){
+  //if the shot hit an asteroid, delete the shot
+   deleteShot(j);
+  //split the asteroid up if needed
+   if(asteroids[i].getHitsLeft()>1){
+    for(int k=0;k<asteroids[i].getNumSplit();k++)
+      addAsteroid(
+      asteroids[i].createSplitAsteroid(
+      minAstVel,maxAstVel));
+ }
+ //delete the original asteroid
+  deleteAsteroid(i);
+  j = numShots; //break out of inner loop - it has
+  //already been hit, so don’t need to check
+
+   //for collision with other shots
+   i--; //don’t skip asteroid shifted back into
+  //the deleted asteroid's position
+   }
+  }
+ }
+}
+
+public void keyPressed(KeyEvent k){
+ switch (k.getKeyCode()) {
+  case KeyEvent.VK_ENTER:
+       if(!ship.isActive() && !paused)
+		   ship.setActive(true);
+		 else {
+		  paused = !paused;
+		  if(paused) 
+		    ship.setActive(false);
+		  else
+		    ship.setActive(true);
+			}
+        break;
+  case KeyEvent.VK_UP:
+          ship.setAccelerating(true);
+          break;
+  case KeyEvent.VK_CONTROL:
+         shooting = true;
+          break;
+  case KeyEvent.VK_LEFT:
+          ship.setTurningLeft(true);
+          break;
+  case KeyEvent.VK_RIGHT:
+       ship.setTurningRight(true);           
+		 break;
+ }
+}
+
+public void keyReleased(KeyEvent k){
+ switch (k.getKeyCode()) {
+  case KeyEvent.VK_UP:
+          ship.setAccelerating(false);
+          break;
+  case KeyEvent.VK_CONTROL:
+          shooting = false;
+          break;
+  case KeyEvent.VK_LEFT:
+         ship.setTurningLeft(false);
+          break;
+  case KeyEvent.VK_RIGHT:
+         ship.setTurningRight(false);
+          break;
+ }
+}
+
+public void keyTyped(KeyEvent k){}
 }
